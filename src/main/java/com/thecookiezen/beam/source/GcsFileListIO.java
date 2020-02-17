@@ -10,6 +10,7 @@ import org.apache.beam.sdk.io.BoundedSource;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.transforms.Flatten;
 import org.apache.beam.sdk.transforms.PTransform;
+import org.apache.beam.sdk.transforms.Reshuffle;
 import org.apache.beam.sdk.values.PBegin;
 import org.apache.beam.sdk.values.PCollection;
 
@@ -39,7 +40,9 @@ public class GcsFileListIO {
         public PCollection<String> expand(PBegin input) {
             return input
                     .apply(org.apache.beam.sdk.io.Read.from(new GcsFilesListSource(path)))
-                    .apply(Flatten.iterables());
+                    .apply(Flatten.iterables())
+                    .apply("Reshuffle", Reshuffle.viaRandomKey());
+
         }
     }
 
@@ -69,7 +72,7 @@ public class GcsFileListIO {
 
     static class GcsFilesListReader extends BoundedSource.BoundedReader<List<String>> {
 
-        private final GcsOptions storage;
+        private final GcsUtil storage;
         private final GcsFilesListSource gcsFilesListSource;
         private final String bucket;
         private final String prefix;
@@ -78,7 +81,7 @@ public class GcsFileListIO {
         private List<String> result = Collections.emptyList();
 
         public GcsFilesListReader(GcsOptions storage, GcsPath gcsPattern, GcsFilesListSource gcsFilesListSource) {
-            this.storage = storage;
+            this.storage = storage.getGcsUtil();
             this.bucket = gcsPattern.getBucket();
             this.prefix = GcsUtil.getNonWildcardPrefix(gcsPattern.getObject());
             this.gcsFilesListSource = gcsFilesListSource;
@@ -95,7 +98,7 @@ public class GcsFileListIO {
         }
 
         public boolean loadData() throws IOException {
-            Objects objects = storage.getGcsUtil().listObjects(bucket, prefix, pageToken);
+            Objects objects = storage.listObjects(bucket, prefix, pageToken);
 
             result = objects.getItems()
                     .stream()
