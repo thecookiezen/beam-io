@@ -3,6 +3,9 @@ package com.thecookiezen.beam.source;
 import com.google.api.services.storage.model.Objects;
 import com.google.api.services.storage.model.StorageObject;
 import org.apache.beam.sdk.annotations.Experimental;
+import org.apache.beam.sdk.coders.Coder;
+import org.apache.beam.sdk.coders.ListCoder;
+import org.apache.beam.sdk.coders.StringUtf8Coder;
 import org.apache.beam.sdk.extensions.gcp.options.GcsOptions;
 import org.apache.beam.sdk.extensions.gcp.util.GcsUtil;
 import org.apache.beam.sdk.extensions.gcp.util.gcsfs.GcsPath;
@@ -67,6 +70,11 @@ public class GcsFileListIO {
         @Override
         public BoundedReader<List<String>> createReader(PipelineOptions options) throws IOException {
             return new GcsFilesListReader(options.as(GcsOptions.class), path, this);
+        }
+
+        @Override
+        public Coder<List<String>> getOutputCoder() {
+            return ListCoder.of(StringUtf8Coder.of());
         }
     }
 
