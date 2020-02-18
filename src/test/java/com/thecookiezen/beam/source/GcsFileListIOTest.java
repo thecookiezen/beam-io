@@ -2,15 +2,17 @@ package com.thecookiezen.beam.source;
 
 import com.google.api.services.storage.model.Objects;
 import com.google.api.services.storage.model.StorageObject;
-import org.apache.beam.sdk.Pipeline;
-import org.apache.beam.sdk.PipelineResult;
 import org.apache.beam.sdk.extensions.gcp.options.GcsOptions;
 import org.apache.beam.sdk.extensions.gcp.util.GcsUtil;
 import org.apache.beam.sdk.extensions.gcp.util.gcsfs.GcsPath;
-import org.apache.beam.sdk.options.PipelineOptionsFactory;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
-import org.mockito.MockitoAnnotations;
+import org.apache.beam.sdk.testing.PAssert;
+import org.apache.beam.sdk.testing.TestPipeline;
+import org.apache.beam.sdk.values.PCollection;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
+import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.math.BigInteger;
@@ -22,17 +24,13 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 
-class GcsFileListIOTest {
+@RunWith(JUnit4.class)
+public class GcsFileListIOTest {
 
-    private final GcsOptions gcsOptions = PipelineOptionsFactory.as(GcsOptions.class);
+    @Rule
+    public final transient TestPipeline pipeline = TestPipeline.create().enableAbandonedNodeEnforcement(false);
 
-    private GcsUtil mockGcsUtil;
-
-    @BeforeAll
-    public void setUp() {
-        MockitoAnnotations.initMocks(this);
-        gcsOptions.setGcsUtil(mockGcsUtil);
-    }
+    private GcsUtil mockGcsUtil = Mockito.mock(GcsUtil.class);
 
     @Test
     public void should_stream_file_names_from_the_bucket() throws IOException {
@@ -51,17 +49,17 @@ class GcsFileListIOTest {
 
         modelObjects.setItems(items);
 
+        pipeline.getOptions().as(GcsOptions.class).setGcsUtil(mockGcsUtil);
+
         when(mockGcsUtil.listObjects(eq("testbucket"), anyString(), isNull()))
                 .thenReturn(modelObjects);
 
-        Pipeline p = Pipeline.create(gcsOptions);
+        final PCollection<String> output =
+                pipeline.apply("ReadFileNames", GcsFileListIO.fromPath(GcsPath.fromUri("gs://testbucket/testdirectory/*")));
 
-        p.apply("ReadFileNames", GcsFileListIO.fromPath(GcsPath.fromUri("gs://testbucket/testdirectory/")));
+        PAssert.that(output).containsInAnyOrder("a", "b");
 
-        PipelineResult result = p.run();
-        PipelineResult.State state = result.waitUntilFinish();
-//        assertThat(state, equalTo(PipelineResult.State.DONE));
-
+        pipeline.run();
     }
 
     private StorageObject createStorageObject(String gcsFilename) {
