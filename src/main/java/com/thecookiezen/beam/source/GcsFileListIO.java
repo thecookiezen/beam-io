@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Experimental(Experimental.Kind.SOURCE_SINK)
@@ -45,7 +46,6 @@ public class GcsFileListIO {
                     .apply(org.apache.beam.sdk.io.Read.from(new GcsFilesListSource(path)))
                     .apply(Flatten.iterables())
                     .apply("Reshuffle", Reshuffle.viaRandomKey());
-
         }
     }
 
@@ -82,17 +82,17 @@ public class GcsFileListIO {
 
         private final GcsUtil storage;
         private final GcsFilesListSource gcsFilesListSource;
-        private final String bucket;
-        private final String prefix;
+        private final StorageObject directory;
+        private final Pattern pattern;
 
         private String pageToken;
         private List<String> result = Collections.emptyList();
 
-        public GcsFilesListReader(GcsOptions storage, GcsPath gcsPattern, GcsFilesListSource gcsFilesListSource) {
+        public GcsFilesListReader(GcsOptions storage, GcsPath gcsPattern, GcsFilesListSource gcsFilesListSource) throws IOException {
             this.storage = storage.getGcsUtil();
-            this.bucket = gcsPattern.getBucket();
-            this.prefix = GcsUtil.getNonWildcardPrefix(gcsPattern.getObject());
             this.gcsFilesListSource = gcsFilesListSource;
+            this.directory = this.storage.getObject(gcsPattern);
+            this.pattern = Pattern.compile(GcsUtil.wildcardToRegexp(gcsPattern.getObject() + "/*"));
         }
 
         @Override
@@ -106,11 +106,12 @@ public class GcsFileListIO {
         }
 
         public boolean loadData() throws IOException {
-            Objects objects = storage.listObjects(bucket, prefix, pageToken);
+            Objects objects = storage.listObjects(directory.getBucket(), directory.getName(), pageToken);
 
             result = objects.getItems()
                     .stream()
-                    .map(StorageObject::getSelfLink)
+                    .map(StorageObject::getName)
+                    .filter(file -> pattern.matcher(file).matches() && !file.endsWith("/"))
                     .collect(Collectors.toList());
 
             pageToken = objects.getNextPageToken();
