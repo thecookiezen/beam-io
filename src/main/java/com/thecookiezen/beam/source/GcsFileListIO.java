@@ -58,12 +58,12 @@ public class GcsFileListIO {
         }
 
         @Override
-        public List<? extends BoundedSource<List<String>>> split(long desiredBundleSizeBytes, PipelineOptions options) throws Exception {
+        public List<? extends BoundedSource<List<String>>> split(long desiredBundleSizeBytes, PipelineOptions options) {
             return Collections.singletonList(new GcsFileListIO.GcsFilesListSource(path));
         }
 
         @Override
-        public long getEstimatedSizeBytes(PipelineOptions options) throws Exception {
+        public long getEstimatedSizeBytes(PipelineOptions options) {
             return 0L;
         }
 
@@ -81,18 +81,20 @@ public class GcsFileListIO {
     static class GcsFilesListReader extends BoundedSource.BoundedReader<List<String>> {
 
         private final GcsUtil storage;
+        private final GcsPath gcsPath;
         private final GcsFilesListSource gcsFilesListSource;
-        private final StorageObject directory;
+        private final String prefix;
         private final Pattern pattern;
 
         private String pageToken;
         private List<String> result = Collections.emptyList();
 
-        public GcsFilesListReader(GcsOptions storage, GcsPath gcsPattern, GcsFilesListSource gcsFilesListSource) throws IOException {
+        public GcsFilesListReader(GcsOptions storage, GcsPath gcsPath, GcsFilesListSource gcsFilesListSource) throws IOException {
             this.storage = storage.getGcsUtil();
+            this.gcsPath = gcsPath;
             this.gcsFilesListSource = gcsFilesListSource;
-            this.directory = this.storage.getObject(gcsPattern);
-            this.pattern = Pattern.compile(GcsUtil.wildcardToRegexp(gcsPattern.getObject() + "/*"));
+            this.prefix = GcsUtil.getNonWildcardPrefix(gcsPath.getObject());
+            this.pattern = Pattern.compile(GcsUtil.wildcardToRegexp(gcsPath.getObject()));
         }
 
         @Override
@@ -106,12 +108,16 @@ public class GcsFileListIO {
         }
 
         public boolean loadData() throws IOException {
-            Objects objects = storage.listObjects(directory.getBucket(), directory.getName(), pageToken);
+            Objects objects = storage.listObjects(gcsPath.getBucket(), prefix, pageToken);
 
             result = objects.getItems()
                     .stream()
                     .map(StorageObject::getName)
                     .filter(file -> pattern.matcher(file).matches() && !file.endsWith("/"))
+                    .map(name -> {
+                        final String[] split = name.split("/");
+                        return split[split.length - 1];
+                    })
                     .collect(Collectors.toList());
 
             pageToken = objects.getNextPageToken();
@@ -124,7 +130,8 @@ public class GcsFileListIO {
         }
 
         @Override
-        public void close() {}
+        public void close() {
+        }
 
         @Override
         public BoundedSource<List<String>> getCurrentSource() {
