@@ -89,7 +89,7 @@ public class GcsFileListIO {
         private String pageToken;
         private List<String> result = Collections.emptyList();
 
-        public GcsFilesListReader(GcsOptions storage, GcsPath gcsPath, GcsFilesListSource gcsFilesListSource) throws IOException {
+        public GcsFilesListReader(GcsOptions storage, GcsPath gcsPath, GcsFilesListSource gcsFilesListSource) {
             this.storage = storage.getGcsUtil();
             this.gcsPath = gcsPath;
             this.gcsFilesListSource = gcsFilesListSource;
@@ -104,6 +104,9 @@ public class GcsFileListIO {
 
         @Override
         public boolean advance() throws IOException {
+            if (pageToken == null)
+                return false;
+
             return loadData();
         }
 
